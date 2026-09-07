@@ -19,7 +19,11 @@ libraries; no development tools are needed. Remove it with `sudo apt remove neta
 
 Tags such as `v1.1.0` trigger the Ubuntu 24.04 workflow, which builds, tests,
 packages, verifies installation, and publishes the `.deb` and SHA256 checksum.
-Manual workflow runs build downloadable artifacts without publishing a release.
+For manual publishing, open **Actions → Ubuntu 24.04 release → Run workflow**,
+leave the workflow branch as `master`, and enter the existing release tag
+(default: `v1.1.0`). Both automatic and manual runs build the selected tag and
+publish its assets only after the build, tests, and installation check succeed.
+Re-running a release replaces the assets for that tag.
 To package a local release build on Ubuntu 24.04 amd64:
 
 ```sh
