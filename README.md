@@ -3,6 +3,30 @@
 A network debugging assistant based on Qt 5 Widgets, with UDP, TCP client/server,
 file transfer, group chat, and Chinese/English interfaces.
 
+## Ubuntu 24.04 release
+
+Download the amd64 `.deb` and matching `.sha256` file from
+[Releases](https://github.com/luokyme/NetAssistant/releases).
+
+```sh
+sha256sum -c netassistant_1.1.0_ubuntu24.04_amd64.deb.sha256
+sudo apt install ./netassistant_1.1.0_ubuntu24.04_amd64.deb
+NetAssistant
+```
+
+The package also adds an application-menu launcher. `apt` installs the Qt runtime
+libraries; no development tools are needed. Remove it with `sudo apt remove netassistant`.
+
+Tags such as `v1.1.0` trigger the Ubuntu 24.04 workflow, which builds, tests,
+packages, verifies installation, and publishes the `.deb` and SHA256 checksum.
+Manual workflow runs build downloadable artifacts without publishing a release.
+To package a local release build on Ubuntu 24.04 amd64:
+
+```sh
+sudo apt install dpkg-dev
+scripts/package-ubuntu.sh 1.1.0 build/NetAssistant dist
+```
+
 ## Build on Linux
 
 Ubuntu / Debian:

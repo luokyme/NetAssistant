@@ -1,0 +1,81 @@
+name: Ubuntu 24.04 release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential qtbase5-dev qt5-qmake dpkg-dev
+      - name: Build release binary
+        run: |
+          mkdir build
+          cd build
+          qmake ../NetAssistant.pro CONFIG+=release CONFIG-=debug
+          make -j"$(nproc)"
+      - name: Run local network regression tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          mkdir build-tests
+          cd build-tests
+          qmake ../tests/network.pro
+          make -j"$(nproc)"
+          ./network-tests
+      - name: Package
+        env:
+          RELEASE_REF: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          version=1.1.0
+          if [[ "$REF_TYPE" == tag ]]; then version="$RELEASE_REF"; fi
+          scripts/package-ubuntu.sh "$version" build/NetAssistant dist
+      - name: Verify installation and startup
+        run: |
+          sudo apt-get install -y ./dist/*.deb
+          set +e
+          QT_QPA_PLATFORM=offscreen timeout 3s /usr/bin/NetAssistant
+          status=$?
+          set -e
+          test "$status" -eq 124
+      - uses: actions/upload-artifact@v4
+        with:
+          name: netassistant-ubuntu24.04-amd64
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: netassistant-ubuntu24.04-amd64
+          path: dist
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/* --clobber
+          else
+            gh release create "$RELEASE_TAG" dist/* --verify-tag \
+              --title "$RELEASE_TAG — Ubuntu 24.04 amd64" \
+              --notes-file packaging/release-notes.md
+          fi

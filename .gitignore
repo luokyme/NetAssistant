@@ -9,3 +9,7 @@ ui_*.h
 core
 *.core
 
+
+/build/
+/build-tests/
+/dist/

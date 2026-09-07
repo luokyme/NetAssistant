@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=NetAssistant
+Comment=UDP and TCP network debugging assistant
+Comment[zh_CN]=UDP 和 TCP 网络调试助手
+Exec=NetAssistant
+Icon=netassistant
+Terminal=false
+Categories=Development;Network;
