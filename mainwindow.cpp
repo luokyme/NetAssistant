@@ -67,7 +67,7 @@ void MainWindow::on_pBtnNetCnnt_clicked(bool checked)
             lhPort = ui->lEditIpPort->text().toInt();
             rmtAddr.setAddress(ui->lEditUdpIP->text());
             rmtPort = ui->lEditUdpPort->text().toInt();
-            bool result = udpSocket->bind(lhPort);
+            bool result = udpSocket->bind(lhAddr, lhPort);
             if(!result)
             {
                 ui->pBtnNetCnnt->setChecked(0);

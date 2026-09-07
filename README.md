@@ -11,6 +11,9 @@ A network debugging assistant based on Qt GUI.
 
 ## Getting Started
 This project is built on Qt5. 
+```
+sudo apt-get install qt5-default qt5-qmake
+```
 
 ### Build
 ```
