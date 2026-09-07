@@ -127,7 +127,7 @@
               </sizepolicy>
              </property>
              <property name="inputMask">
-              <string>000.000.000.000</string>
+              <string/>
              </property>
             </widget>
            </item>
@@ -742,10 +742,10 @@
              </size>
             </property>
             <property name="inputMask">
-             <string>000.000.000.000</string>
+             <string/>
             </property>
             <property name="text">
-             <string>...</string>
+             <string/>
             </property>
            </widget>
           </item>

@@ -432,5 +432,25 @@
 </source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>服务器IP / 域名</source>
+        <translation>服务器IP / 域名</translation>
+    </message>
+    <message>
+        <source>请输入有效的地址和端口 (0–65535，服务器目标端口不能为 0)。</source>
+        <translation>请输入有效的地址和端口 (0–65535，服务器目标端口不能为 0)。</translation>
+    </message>
+    <message>
+        <source>UDP绑定失败: </source>
+        <translation>UDP绑定失败: </translation>
+    </message>
+    <message>
+        <source>尝试连接服务器失败: </source>
+        <translation>尝试连接服务器失败: </translation>
+    </message>
+    <message>
+        <source>请输入有效的 UDP 目标IP地址和端口 (1–65535)。</source>
+        <translation>请输入有效的 UDP 目标IP地址和端口 (1–65535)。</translation>
+    </message>
 </context>
 </TS>

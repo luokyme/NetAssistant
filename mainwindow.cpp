@@ -11,6 +11,7 @@
 #include <QTimer>
 #include <QInputDialog>
 #include <QDateTime>
+#include <QIntValidator>
 
 const char toHex[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
 
@@ -19,6 +20,15 @@ MainWindow::MainWindow(QWidget *parent) :
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+
+    udpSocket = 0;
+    tcpClientSocket = 0;
+    mtcpServer = 0;
+    timer = new QTimer(this);
+    connect(timer, SIGNAL(timeout()), this, SLOT(toSendData()));
+    ui->lEditIpPort->setValidator(new QIntValidator(0, 65535, this));
+    ui->lEditUdpPort->setValidator(new QIntValidator(1, 65535, this));
+    m_ip = QHostAddress(QHostAddress::LocalHost).toString();
 
     //设置程序的开启默认画面
     setUdpGuiExt();
@@ -38,7 +48,6 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->SndProgressBar->setVisible(false);
 
     //初始化全局变量
-    rmtServerIP = new QHostAddress();
     rcvDataCnt  = 0;
     sndDataCnt = 0;
     TcpClientLinkCnt = 0;
@@ -51,6 +60,9 @@ MainWindow::MainWindow(QWidget *parent) :
 
 MainWindow::~MainWindow()
 {
+    timer->stop();
+    if(tcpClientSocket)
+        tcpClientSocket->disconnect(this);
     delete ui;
 }
 
@@ -59,26 +71,43 @@ MainWindow::~MainWindow()
 void MainWindow::on_pBtnNetCnnt_clicked(bool checked)
 {
     if(checked) {     //切换到链接状态
+        const int mode = ui->cBoxNetType->currentIndex();
+        const QString host = ui->lEditIpAddr->text().trimmed();
+        bool portOk = false;
+        lhPort = ui->lEditIpPort->text().toInt(&portOk);
+        if(!portOk || lhPort < (mode == TCP_CLIENT_MODE ? 1 : 0) || lhPort > 65535 ||
+                host.isEmpty() || (mode != TCP_CLIENT_MODE && !lhAddr.setAddress(host))) {
+            ui->pBtnNetCnnt->setChecked(false);
+            QMessageBox::information(this, tr("错误"), tr("请输入有效的地址和端口 (0–65535，服务器目标端口不能为 0)。"));
+            return;
+        }
+        if(mode == UDP_MODE && !validateUdpTarget()) {
+            ui->pBtnNetCnnt->setChecked(false);
+            return;
+        }
         if(ui->cBoxNetType->currentIndex() == UDP_MODE) {
             //建立UDP链接
             udpSocket = new QUdpSocket(this);
             connect(udpSocket, SIGNAL(readyRead()), this, SLOT(udpDataReceived()));
-            lhAddr.setAddress(ui->lEditIpAddr->text());
+            lhAddr.setAddress(ui->lEditIpAddr->text().trimmed());
             lhPort = ui->lEditIpPort->text().toInt();
-            rmtAddr.setAddress(ui->lEditUdpIP->text());
+            rmtAddr.setAddress(ui->lEditUdpIP->text().trimmed());
             rmtPort = ui->lEditUdpPort->text().toInt();
-            bool result = udpSocket->bind(lhPort);
+            bool result = udpSocket->bind(lhAddr, lhPort);
             if(!result)
             {
                 ui->pBtnNetCnnt->setChecked(0);
-                QMessageBox::information(this, tr("错误"), tr("UDP绑定端口失败!"));
+                QMessageBox::information(this, tr("错误"), tr("UDP绑定失败: ") + udpSocket->errorString());
+                delete udpSocket;
+                udpSocket = 0;
                 return;
             }
+            ui->lEditIpPort->setText(QString::number(udpSocket->localPort()));
             ui->CurState->setText(tr("建立UDP连接成功"));
 
         } else if(ui->cBoxNetType->currentIndex() == TCP_SERVER_MODE) {
             //建立TCP服务器链接
-            lhAddr.setAddress(ui->lEditIpAddr->text());
+            lhAddr.setAddress(ui->lEditIpAddr->text().trimmed());
             lhPort = ui->lEditIpPort->text().toInt();
 
             if(! slotTryCreateTcpServer())
@@ -87,46 +116,59 @@ void MainWindow::on_pBtnNetCnnt_clicked(bool checked)
                 QMessageBox::information(this, tr("错误"), tr("尝试建立服务器失败! 请确认网络状态和端口。"));
                 return;
             }
+            ui->lEditIpPort->setText(QString::number(mtcpServer->serverPort()));
             ui->CurState->setText(tr("建立TCP服务器成功"));
         } else if(ui->cBoxNetType->currentIndex() == TCP_CLIENT_MODE) {
             //建立TCP客户端
-            QString ip = ui->lEditIpAddr->text();
-            if(!rmtServerIP->setAddress(ip))
-            {
-                QMessageBox::information(this, tr("错误"), tr("TCP服务器IP设置失败!"));
-                return;
-            }
             tcpClientSocket = new QTcpSocket(this);
             connect(tcpClientSocket, SIGNAL(readyRead()), this, SLOT(tcpClientDataReceived()));
-            tcpClientSocket->connectToHost(*rmtServerIP, ui->lEditIpPort->text().toInt());
+            tcpClientSocket->connectToHost(host, lhPort);
 
             if(!tcpClientSocket->waitForConnected(2000)) {
                 ui->lEditUdpPort->setText(QString::number(0, 10));
                 ui->pBtnNetCnnt->setChecked(0);
-                QMessageBox::information(this, tr("错误"), tr("尝试连接服务器失败! 请确认服务器状态。"));
+                const QString error = tcpClientSocket->errorString();
+                delete tcpClientSocket;
+                tcpClientSocket = 0;
+                QMessageBox::information(this, tr("错误"), tr("尝试连接服务器失败: ") + error);
 
                 return;
             }
 
+            ui->lEditUdpIP->setText(tcpClientSocket->localAddress().toString());
+            connect(tcpClientSocket, SIGNAL(disconnected()), this, SLOT(disconnectNetwork()));
             ui->lEditUdpPort->setText(QString::number(tcpClientSocket->localPort(), 10));
             ui->CurState->setText(tr("连接TCP服务器成功"));
         }
+        ui->cBoxNetType->setEnabled(false);
+        ui->lEditIpAddr->setEnabled(false);
+        ui->lEditIpPort->setEnabled(false);
         ui->pBtnNetCnnt->setText(tr("断开网络"));
         ui->pBtnSendData->setEnabled(true);
         //NetState = true;
     } else { //切换到断开状态
+        timer->stop();
+        loopSending = false;
+        ui->pBtnSendData->setText(tr("发送"));
         if(ui->cBoxNetType->currentIndex() == UDP_MODE) {
             //断开UDP链接
             udpSocket->close();
             delete udpSocket;
+            udpSocket = 0;
         } else if(ui->cBoxNetType->currentIndex() == TCP_SERVER_MODE) {
             //断开TCP服务器链接
             slotDeleteTcpServer();
         } else if(ui->cBoxNetType->currentIndex() == TCP_CLIENT_MODE) {
             //断开TCP客户端链接
-            tcpClientSocket->disconnectFromHost();
+            tcpClientSocket->disconnect(this);
+            tcpClientSocket->abort();
+            tcpClientSocket->deleteLater();
+            tcpClientSocket = 0;
         }
 
+        ui->cBoxNetType->setEnabled(true);
+        ui->lEditIpAddr->setEnabled(true);
+        ui->lEditIpPort->setEnabled(true);
         ui->pBtnNetCnnt->setText(tr("连接网络"));
         ui->pBtnSendData->setEnabled(false);
         ui->CurState->setText(tr(""));
@@ -154,10 +196,10 @@ void MainWindow::on_cBoxNetType_currentIndexChanged(int index)
     } else if(index == TCP_CLIENT_MODE) {
         setTcpClientGuiExt();
         ui->label_Port->setText(tr("服务器端口"));
-        ui->label_IP->setText(tr("服务器IP地址"));
+        ui->label_IP->setText(tr("服务器IP / 域名"));
         ui->labelUdp->setText(tr("本地IP地址"));
         ui->labelUdp1->setText(tr("本地端口"));
-        ui->lEditIpAddr->setText(tr("220.165.9.87"));
+        ui->lEditIpAddr->setText("localhost");
     }
 }
 
@@ -216,6 +258,8 @@ void MainWindow::setTcpClientGuiExt()
 void MainWindow::on_pBtnSendData_clicked()
 {
     if(ui->cBoxStartSndFile->checkState()) {
+        if(ui->cBoxNetType->currentIndex() == UDP_MODE && !validateUdpTarget())
+            return;
         on_pBtnResetCnt_clicked();
         ui->pBtnSendData->setText(tr("正在发送"));
         ui->pBtnSendData->setEnabled(false);
@@ -230,7 +274,7 @@ void MainWindow::on_pBtnSendData_clicked()
         ui->ReceiveTextEdit->appendPlainText(tr("共发送数据：") + hasSndSz + "MB");
 
         ui->pBtnSendData->setText(tr("发送"));
-        ui->pBtnSendData->setEnabled(true);
+        ui->pBtnSendData->setEnabled(ui->pBtnNetCnnt->isChecked());
         return;
     }
 
@@ -262,6 +306,10 @@ void MainWindow::on_pBtnSendData_clicked()
 //send data
 void MainWindow::toSendData()
 {
+    if(!ui->pBtnNetCnnt->isChecked())
+        return;
+    if(ui->cBoxNetType->currentIndex() == UDP_MODE && !validateUdpTarget())
+        return;
     QByteArray datagram;
 
     if(ui->cBox_SndHexDisp->checkState()) {
@@ -308,7 +356,7 @@ void MainWindow::toSendFile()
     ui->SndProgressBar->setValue(0);
     if(ui->cBoxNetType->currentIndex() == UDP_MODE) {   //UDP 模式
 
-        while(!curFile->atEnd())
+        while(ui->pBtnNetCnnt->isChecked() && !curFile->atEnd())
         {
             rdLen = curFile->read(buf, 1024);
             udpSocket->writeDatagram(buf, rdLen, rmtAddr, rmtPort);
@@ -320,7 +368,7 @@ void MainWindow::toSendFile()
     } else if(ui->cBoxNetType->currentIndex() == TCP_SERVER_MODE) { //TCP服务器模式
         int idx = ui->cBoxClients->currentIndex() ;
         if(idx == 0) {
-            while(!curFile->atEnd())
+            while(ui->pBtnNetCnnt->isChecked() && !curFile->atEnd())
             {
                 //msDelay(2);
                 rdLen = curFile->read(buf, 1024);
@@ -332,7 +380,7 @@ void MainWindow::toSendFile()
                 QCoreApplication::processEvents(QEventLoop::AllEvents, 1);
             }
         } else {
-            while(!curFile->atEnd())
+            while(ui->pBtnNetCnnt->isChecked() && !curFile->atEnd())
             {
                 // msDelay(2);
                 rdLen = curFile->read(buf, 1024);
@@ -344,7 +392,7 @@ void MainWindow::toSendFile()
             }
         }
     } else if(ui->cBoxNetType->currentIndex() == TCP_CLIENT_MODE) {
-        while(!curFile->atEnd())
+        while(ui->pBtnNetCnnt->isChecked() && !curFile->atEnd())
         {
             rdLen = curFile->read(buf, 1024);
             tcpClientSocket->write(buf, rdLen);
@@ -441,7 +489,7 @@ void MainWindow::on_lEditUdpPort_textChanged(QString text)
 //UDP IP  Adderess changed PRC
 void MainWindow::on_lEditUdpIP_textChanged(QString text)
 {
-    rmtAddr.setAddress(text);
+    rmtAddr.setAddress(text.trimmed());
 }
 
 /**********************************************************/
@@ -508,8 +556,9 @@ bool MainWindow::slotTryCreateTcpServer()
 
     if(! mtcpServer->listen(lhAddr, lhPort))
     {
+        delete mtcpServer;
+        mtcpServer = 0;
         return false;
-        QMessageBox::information(this, tr("错误"), tr("尝试建立服务器失败! 请确认网络状态和端口。"));
     }
 
     connect(mtcpServer, SIGNAL(updateTcpServer(char*, int, int)), this, SLOT(tcpServerDataReceived(char*, int, int)));
@@ -526,7 +575,11 @@ void MainWindow::slotDeleteTcpServer()
     //disconnect(mtcpServer,SIGNAL(updateTcpServer(char*,int,int)),this,SLOT(tcpServerDataReceived(char*,int,int)));
     mtcpServer->disconnect();
     mtcpServer->close();
-    delete  mtcpServer;
+    delete mtcpServer;
+    mtcpServer = 0;
+    TcpClientLinkCnt = 0;
+    tcpClientSocketDescriptorList.clear();
+    ui->cBoxClients->clear();
 }
 
 /**********************************************************/
@@ -552,7 +605,7 @@ void MainWindow::tcpServerDataReceived(char *msg, int length, int socketDescript
 
             //输出数据到接收显示区
             if(!ui->cBox_RcvHexDisp->checkState()) { //显示字符串
-                ui->ReceiveTextEdit->insertPlainText(msg);
+                ui->ReceiveTextEdit->insertPlainText(QString::fromUtf8(msg, length));
             } else {                                                           //显示十六进制字符串
                 for(int i = 0; i < length; i++) {
                     char ch = *(msg + i);
@@ -627,20 +680,15 @@ void MainWindow::on_pBtnSaveRcvData_clicked()
 //开启定时自动发送功能
 void MainWindow::on_cBoxLoopSnd_toggled(bool checked)
 {
+    timer->stop();
+    loopSending = false;
+    ui->pBtnSendData->setText(tr("发送"));
     if(checked) {
-        timer = new QTimer(this);
-        connect(timer, SIGNAL(timeout()), this, SLOT(toSendData()));
-        int msInterval = ui->lEdit_Interval_ms->text().toInt();
-        if(msInterval > 0) {
-            timer->setInterval(ui->lEdit_Interval_ms->text().toInt());
-        } else {
+        const int interval = ui->lEdit_Interval_ms->text().toInt();
+        if(interval > 0)
+            timer->setInterval(interval);
+        else
             ui->cBoxLoopSnd->setChecked(false);
-            delete timer;
-        }
-    } else {
-        timer->stop();
-        delete timer;
-        ui->pBtnSendData->setEnabled(true);
     }
 }
 
@@ -831,4 +879,29 @@ void MainWindow::on_actionChinese_triggered()
     translator.load(":/language/Chinese.qm");
     qApp->installTranslator(&translator);
     ui->retranslateUi(this);
+}
+
+void MainWindow::disconnectNetwork()
+{
+    if(ui->pBtnNetCnnt->isChecked()) {
+        ui->pBtnNetCnnt->setChecked(false);
+        on_pBtnNetCnnt_clicked(false);
+    }
+}
+
+bool MainWindow::validateUdpTarget()
+{
+    bool ok = false;
+    const int port = ui->lEditUdpPort->text().toInt(&ok);
+    QHostAddress address;
+    if(!address.setAddress(ui->lEditUdpIP->text().trimmed()) || !ok || port < 1 || port > 65535) {
+        timer->stop();
+        loopSending = false;
+        ui->pBtnSendData->setText(tr("发送"));
+        QMessageBox::information(this, tr("错误"), tr("请输入有效的 UDP 目标IP地址和端口 (1–65535)。"));
+        return false;
+    }
+    rmtAddr = address;
+    rmtPort = port;
+    return true;
 }

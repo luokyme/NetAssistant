@@ -45,6 +45,7 @@ private slots:
 
     //=======UDP========
     void udpDataReceived();
+    void disconnectNetwork();
 
     //=====TCP Client=====
     void tcpClientDataReceived();
@@ -80,6 +81,7 @@ private slots:
     void on_actionChinese_triggered();
 
 private:
+    bool validateUdpTarget();
     Ui::MainWindow *ui;
 
     QString m_ip;
@@ -91,7 +93,6 @@ private:
     int rmtPort;
 
     //-----TCP Client-----
-    QHostAddress *rmtServerIP;
     QTcpSocket *tcpClientSocket;
     TcpServer *mtcpServer;
 

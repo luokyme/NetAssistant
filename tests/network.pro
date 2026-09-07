@@ -1,0 +1,9 @@
+QT += widgets network testlib
+CONFIG += testcase c++11
+TARGET = network-tests
+TEMPLATE = app
+INCLUDEPATH += ..
+SOURCES += network_test.cpp ../mainwindow.cpp ../TcpServer.cpp
+HEADERS += ../mainwindow.h ../TcpServer.h ../define.h
+FORMS += ../mainwindow.ui
+RESOURCES += ../qrc.qrc

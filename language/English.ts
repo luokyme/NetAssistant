@@ -433,5 +433,25 @@
 </source>
         <translation>TX data from file:</translation>
     </message>
+    <message>
+        <source>服务器IP / 域名</source>
+        <translation>Server IP / hostname</translation>
+    </message>
+    <message>
+        <source>请输入有效的地址和端口 (0–65535，服务器目标端口不能为 0)。</source>
+        <translation>Enter a valid address and port (0–65535; the server destination port cannot be 0).</translation>
+    </message>
+    <message>
+        <source>UDP绑定失败: </source>
+        <translation>UDP bind failed: </translation>
+    </message>
+    <message>
+        <source>尝试连接服务器失败: </source>
+        <translation>Connection failed: </translation>
+    </message>
+    <message>
+        <source>请输入有效的 UDP 目标IP地址和端口 (1–65535)。</source>
+        <translation>Enter a valid UDP destination IP address and port (1–65535).</translation>
+    </message>
 </context>
 </TS>

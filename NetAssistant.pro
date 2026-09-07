@@ -4,6 +4,8 @@
 #
 #-------------------------------------------------
 
+!equals(QT_MAJOR_VERSION, 5): error("NetAssistant requires Qt 5")
+CONFIG += c++11
 QT       += core gui
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
@@ -32,7 +34,8 @@ RESOURCES += \
 
 QT  +=network
 
-RC_FILE += icon.rc
+win32:RC_FILE += icon.rc
+msvc:QMAKE_CXXFLAGS += /utf-8
 
 DISTFILES += \
     android/AndroidManifest.xml
